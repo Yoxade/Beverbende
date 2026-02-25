@@ -1,4 +1,3 @@
-
 // Player input in starting screen
 const playerCountSelect = document.getElementById("playerCount");
 const playerInputsDiv = document.getElementById("playerInputs");
@@ -107,6 +106,11 @@ startNextRoundButton.addEventListener("click", () => {
   discardPileImg.src = "";
   discardPileImg.dataset.value = "";
 
+  // Reset special card state
+  specialCardsState.specialDrawCounter = 0;
+  specialCardsState.specialDrawPhase = "draw";
+  specialCardsState.allowSpecial = false;
+
   // Update header text and set deck again
   initializeHeaderText(playerData.players);
   setupDeck(playerData.players);
@@ -197,7 +201,6 @@ chooseButton.addEventListener("click", async () => {
 
   // On select does not do anything anymore
   deckCardImg.onclick = null;
-  //discardPileImg.onclick = null;
 });
 
 confirmButton.addEventListener("click", async () => {
@@ -238,10 +241,16 @@ exitButton.addEventListener("click", () => {
   gameState.stopClicked = false;
   gameState.currentRound = 0;
 
+  // Reset special card state
+  specialCardsState.specialDrawCounter = 0;
+  specialCardsState.specialDrawPhase = "draw";
+  specialCardsState.allowSpecial = false;
+
   // Show start screen and hide gameui
   startScreen.style.display = "flex";
   gameUI.style.display = "none";
 });
+
 restartButton.addEventListener("click", () => {
   // Reset all variables
   chooseButton.disabled = true;
@@ -250,6 +259,11 @@ restartButton.addEventListener("click", () => {
   gameState.phase = "reveal";
   gameState.stopClicked = false;
   gameState.currentRound = 0;
+
+  // Reset special card state
+  specialCardsState.specialDrawCounter = 0;
+  specialCardsState.specialDrawPhase = "draw";
+  specialCardsState.allowSpecial = false;
 
   // Start the game again
   startGame();
@@ -269,14 +283,56 @@ laySpecialButton.addEventListener("click", () => {
   }
 });
 
-skipSpecialButton.addEventListener("click", () => {
+// FIX: Skip button now correctly handles being mid-special-draw.
+// If we're using the "draw two" special (card "a") and the drawn card is special,
+// skipping it discards it and lets you continue drawing instead of ending your turn.
+skipSpecialButton.addEventListener("click", async () => {
     const allPlayerCards = document.querySelectorAll(".top .card, .bottom .card");
     allPlayerCards.forEach(card => {
       card.classList.remove("selectable"); 
       card.classList.remove("selected"); 
     });
 
-    // Advance turn, make the next card selectable
+    // Check if we're in the middle of a special draw (card "a") phase
+    if (specialCardsState.specialDrawCounter < 2 && specialCardsState.specialDrawPhase === "swap") {
+      // The drawn card is a special — put it on the discard pile and continue drawing
+      skipSpecialButton.disabled = true;
+      laySpecialButton.disabled = true;
+
+      const drawnValue = deck.shift();
+      deckCount.textContent = deck.length;
+
+      // Animate the deck card flying to discard
+      await flyCard(deckCardImg, discardPileImg, `images/card_${drawnValue}.JPG`, drawnValue);
+      discardPileImg.src = `images/card_${drawnValue}.JPG`;
+      discardPileImg.dataset.value = drawnValue;
+
+      specialCardsState.specialDrawCounter++;
+      specialCardsState.specialDrawPhase = "draw";
+
+      if (specialCardsState.specialDrawCounter >= 2) {
+        // Both draws used up — end the special phase
+        specialCardsState.specialDrawCounter = 0;
+        specialCardsState.allowSpecial = false;
+
+        // Advance turn normally
+        advanceTurn();
+        drawNextCard();
+        initializeHeaderText();
+
+        toggleButtons([laySpecialButton, skipSpecialButton, chooseButton]);
+        chooseButton.disabled = true;
+      } else {
+        // Still have draws left — set up for next draw
+        skipSpecialButton.disabled = false;
+        laySpecialButton.disabled = false;
+        deckCardImg.classList.add("selected");
+        discardPileImg.classList.remove("selectable");
+      }
+      return;
+    }
+
+    // Normal skip (not mid-special-draw) — advance turn
     advanceTurn();
     drawNextCard();
     initializeHeaderText();
@@ -330,7 +386,7 @@ function getPlayerNames() {
 
 // Create the array which is the 'deck'
 function createDeck() {
-  array = [];
+  const array = [];
 
   // Add 4 copies of numbers 0-8
   for (let i = 0; i <= 8; i++) {
@@ -392,7 +448,7 @@ function dealCards(playerCount = 2, cardsPerPlayer = 4, players = [], deck) {
       cardWrapper.classList.add("card-wrapper");
 
       const cardImg = document.createElement("img");
-      cardImg.src = "images/Back.JPG";  // Or cardData.image if you have card face images
+      cardImg.src = "images/Back.JPG";
       cardImg.classList.add("card");
       cardImg.dataset.value = cardData;
 
@@ -456,7 +512,7 @@ function moveNormalCard() {
       deckCount.textContent = deck.length;
       await flyCard(deckCardImg, discardPileImg, `images/card_${deckCardValue}.JPG`, deckCardValue);
       
-      resolve(); // Resolve the main promise after animations are done
+      resolve();
     });
   } else {
     return new Promise(async (resolve) => {
@@ -487,7 +543,7 @@ function moveNormalCard() {
         }
         specialCardsState.allowSpecial = false;
 
-        resolve(); // Resolve the main promise after both animations are done
+        resolve();
 
       } else if (gameState.swapSource === "discard") {
         // 1. Animate discard pile to hand
@@ -515,7 +571,7 @@ function moveNormalCard() {
 }
 
 function setupAfterLayingCard() {
-  // After laying the last card of the round, the score will be noted
+  // Check for special card triggers
   if (
     specialCardsState.specialChars.some(char => discardPileImg.dataset.value.includes(char)) && specialCardsState.allowSpecial
   ) {
@@ -542,35 +598,39 @@ function setupAfterLayingCard() {
       const previousScoreP1 = parseInt(scoreCellP1.textContent) || 0;
       const previousScoreP2 = parseInt(scoreCellP2.textContent) || 0;
 
-      scoreCellP1.textContent = previousScoreP1 + playerOneScore;
-      scoreCellP2.textContent = previousScoreP2 + playerTwoScore;
+      const totalScoreP1 = previousScoreP1 + playerOneScore;
+      const totalScoreP2 = previousScoreP2 + playerTwoScore;
+
+      scoreCellP1.textContent = totalScoreP1;
+      scoreCellP2.textContent = totalScoreP2;
+
+      // FIX: End-game check now uses the computed numeric totals
+      // instead of comparing DOM elements (which was always falsy).
+      if (gameState.currentRound >= 6) {
+        if (totalScoreP1 === totalScoreP2) {
+          document.getElementById("headerText").textContent = "It is a Tie!"
+        } else if (totalScoreP1 > totalScoreP2) {
+          document.getElementById("headerText").innerHTML = 
+            `<span class="player-name player-blue">${playerData.players[0]}</span> has won!`;
+        } else {
+          document.getElementById("headerText").innerHTML = 
+            `<span class="player-name player-green">${playerData.players[1]}</span> has won!`;
+        }
+        // Next game buttons
+        toggleButtons([confirmButton, stopButton, restartButton, exitButton]);
+      } else {
+        // Next round + buttons
+        document.getElementById("headerText").textContent = "Begin de volgende ronde";
+        toggleButtons([confirmButton, stopButton, startNextRoundButton]);
+      }
 
       startNextRoundButton.disabled = false;
     })();
-    
-    // End the game after round 6
-    if(gameState.currentRound >= 6) {
-        if(scoreCellP1 === scoreCellP2) {
-          document.getElementById("headerText").textContent = "It is a Tie!"
-        } else if (scoreCellP1 > scoreCellP2) {
-            document.getElementById("headerText").innerHTML = 
-             `<span class="player-name player-blue">${playerData.players[0]} has won!`;
-        } else {
-          document.getElementById("headerText").innerHTML = 
-             `<span class="player-name player-green">${playerData.players[1]} has won!`;
-        }
-        // Volgend potje
-        toggleButtons([confirmButton, stopButton, restartButton, exitButton]);
-    } else {
-      // Volgende rond + buttons
-      document.getElementById("headerText").textContent = "Begin de volgende ronde";
-      toggleButtons([confirmButton, stopButton, startNextRoundButton]);
-    }
   } else {
     // Normal card changed. So just advance in turn
     advanceTurn();
     
-    // Next card can be draw
+    // Next card can be drawn
     drawNextCard();
     initializeHeaderText();
 
@@ -596,7 +656,6 @@ function setupAfterLayingCard() {
 ///////////////////////////
 
 function initializeHeaderText() {
-  // Randomly choose starting player
   const playerName = playerData.players[playerData.currentPlayerIndex];
 
   // Update header text
@@ -612,7 +671,7 @@ function initializeHeaderText() {
     document.getElementById("headerText").innerHTML = 
     `<span class="player-name ${playerData.colorClass}">${playerName}</span> is aan de beurt`;
   }
-};
+}
 
 
 ///////////////////////////
@@ -652,12 +711,10 @@ function updateSelectableCards() {
           }
         }
 
-        // ✅ Call after every selection change
         updateRevealButtonState();
       };
     });
   } else {
-    // If no valid area, disable the button
     updateRevealButtonState();
   }
 }
@@ -688,7 +745,7 @@ function updateRevealButtonState() {
           card.classList.add("selected");
           deckDetails.selectedCards.push(card);
         }
-        updateRevealButtonState(); // Re-check
+        updateRevealButtonState();
       };
     });
   }
@@ -705,7 +762,6 @@ function selectOneDrawCard(selectableCard, source) {
     discardPileImg.classList.remove("selected");
 
     if (!isSelected) {
-      // Only select if it wasn’t already selected
       selectableCard.classList.add("selected");
       chooseButton.disabled = false;
       gameState.swapSource = source;
@@ -733,9 +789,9 @@ function drawNextCard() {
     deckCardImg.onclick = null;
   }
 
-  // Discard pile logic
+  // FIX: Discard pile source is now "discard" instead of "deck"
   if (discardPileImg.dataset.value?.trim()) {
-    selectOneDrawCard(discardPileImg, "deck");
+    selectOneDrawCard(discardPileImg, "discard");
   } else {
     discardPileImg.onclick = null;
   }
@@ -783,18 +839,18 @@ function optionsForSpecialCard() {
   specialCardsState.allowSpecial = false;
 
   if(discardPileImg.dataset.value === "a") { 
-    // Draw a new card + counter 
     specialCardDrawVisibility();
   } else if (discardPileImg.dataset.value === "b") { 
-    // View a card
     specialCardViewVisibility();
   } else if (discardPileImg.dataset.value === "c") {
-    // Switch two cards
     specialCardSwapVisibility()
   }
 }
 
 function specialCardDrawVisibility(){
+  // Reset draw counter at the start of a new "draw two" ability
+  specialCardsState.specialDrawCounter = 0;
+  specialCardsState.specialDrawPhase = "draw";
   deckCardImg.classList.add("selected");
 }
 
@@ -808,15 +864,23 @@ async function specialCardDraw() {
     deckCount.textContent = "";
 
     // Flip deck card
-    chosenCard = deck[0];
+    const chosenCard = deck[0];
     await flipCard(deckCardImg, `images/card_${chosenCard}.JPG`)
 
     // Next phase is to swap
     deckCount.textContent = deck.length;
     specialCardsState.specialDrawPhase = "swap";
-    allowSwapTargetSelection(true);
+
+    // Check if the drawn card is special — if so, let the player skip or use it
+    if (specialCardsState.specialChars.includes(chosenCard)) {
+      // Show skip/lay buttons so player can choose
+      skipSpecialButton.disabled = false;
+      laySpecialButton.disabled = false;
+    } else {
+      allowSwapTargetSelection(true);
+    }
   } else {
-    // swap or lay the card
+    // Swap or lay the card
     specialCardsState.specialDrawCounter++;
     specialCardsState.specialDrawPhase = "draw";
    
@@ -833,13 +897,16 @@ async function specialCardDraw() {
       card.classList.remove("selectable")
     });
 
-    if(specialCardsState.specialDrawCounter > 1) {
+    if(specialCardsState.specialDrawCounter >= 2) {
       // Reset selectability 
       const allPlayerCards = document.querySelectorAll(".top .card, .bottom .card");
       allPlayerCards.forEach(card => {
         card.classList.remove("selectable"); 
         card.classList.remove("selected"); 
       });
+
+      // Reset counter for next use
+      specialCardsState.specialDrawCounter = 0;
 
       setupAfterLayingCard();
       toggleButtons([laySpecialButton, skipSpecialButton, confirmButton]);
@@ -887,7 +954,7 @@ async function specialCardView() {
 }
 
 function specialCardSwapVisibility() {
-      // Make all cards selectable
+    // Make all cards selectable
     const allPlayerCards = document.querySelectorAll(".top .card, .bottom .card");
     allPlayerCards.forEach(card => {
       card.classList.add("selectable"); 
@@ -1001,9 +1068,8 @@ function flipCardToFront(card, frontSrc) {
 
       // Rotate back to 0deg to show front
       card.style.transform = "rotateY(0deg)";
-    }, 200); // slightly less than transition duration
-
-    resolve();
+      resolve();
+    }, 200);
   });
 }
 
@@ -1044,17 +1110,17 @@ function flyCard(sourceEl, destEl, cardSrc, cardValue) {
         destEl.dataset.value = cardValue;
       }
       flyingWrapper.remove();
-      resolve(); // Resolve the promise here
-    }, { once: true }); // The { once: true } option ensures the listener is automatically removed after firing
+      resolve();
+    }, { once: true });
   });
 }
 
 // Smoothly animate score increase over 1 second
 async function animateScoreIncrement(scoreCellId, startValue, endValue, duration = 1000) {
   const steps = Math.abs(endValue - startValue);
-  if (steps === 0) return; // nothing to animate
+  if (steps === 0) return;
 
-  const stepTime = duration / steps; // time per increment
+  const stepTime = duration / steps;
   let current = startValue;
 
   return new Promise(resolve => {
@@ -1084,12 +1150,12 @@ async function animatePlayerScore(selector, scoreCellId, delay = 300) {
     let value = card.dataset.value;
     await flipCardToFront(card, `images/card_${value}.JPG`);
 
-    // 🔹 Keep drawing/discarding until we get a numeric value
+    // Keep drawing/discarding until we get a numeric value
     while ((isNaN(parseInt(value, 10)) || value === "" || value === null) && deck.length > 0) {
-      const newValue = deck.shift(); // could be number string or letter
+      const newValue = deck.shift();
       deckCount.textContent = deck.length;
 
-      // Animate drawing new card onto the player’s card slot
+      // Animate drawing new card onto the player's card slot
       await flyCard(deckCardImg, card, `images/card_${newValue}.JPG`, newValue);
 
       // Send the old card to discard pile
@@ -1105,7 +1171,7 @@ async function animatePlayerScore(selector, scoreCellId, delay = 300) {
       await wait(300);
     }
 
-    // 🔹 At this point, `value` is the final card value
+    // At this point, `value` is the final card value
     const numericValue = parseInt(value, 10);
     if (!isNaN(numericValue)) {
 
@@ -1133,7 +1199,7 @@ function toggleButtons(elements) {
 }
 
 function toggleButton(element) {
-  if (element) { // Check if the element exists to prevent errors
+  if (element) {
     element.classList.toggle('hidden');
   }
 }
