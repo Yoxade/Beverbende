@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Card Game</title>
+  <link rel="stylesheet" href="new_style.css">
+</head>
+<body>
+
+  <!-- Start Screen -->
+  <div class="start-screen" id="startScreen">
+  <div class="start-wrapper">
+    <h1>Welcome to Beverbende!</h1>
+    <h2>Choose Number of Players</h2>
+
+    <select id="playerCount">
+      <option value="2" selected>2 Players</option>
+      <option value="3">3 Players</option>
+      <option value="4">4 Players</option>
+    </select>
+
+    <div id="playerInputs"></div>
+
+    <button onclick="startGame()">Start Game</button>
+  </div>
+  </div>
+
+  <!-- Game UI -->
+  <div class="game-ui" id="gameUI">
+    <div class="header">
+      <div class="header-content">
+        <span class="header-text" id="headerText">Game</span>
+        <button id="revealButton" disabled class="button approve">Draai twee kaarten om</button>
+        <button id="chooseCardButton" disabled class="button hidden approve">Kies kaart</button>
+        <button id="confirmButton" disabled class="button hidden approve">Leg Kaart</button>
+        <button id="laySpecialCardButton" disabled class="button hidden approve">Gebruik Effect</button>
+        <button id="skipSpecialCardButton" disabled class="button hidden stop">Doe niks</button>
+        <button id="startNextRoundButton" disabled class="button hidden approve">Start de volgende ronde</button>
+        <button id="stopButton" disabled class="button stop">Stop ronde</button>
+        <button id="restartButton" disabled class="button hidden approve">Start opnieuw</button>
+        <button id="exitButton" disabled class="button hidden stop">Stop Spel</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="left">Left</div>
+      <div class="middle">
+        <div class="top">Top</div>
+        <div class="center">
+          <div class="scoreboard">
+            <div class="score-row header">
+              <div>Round</div>
+              <div id="playerOneScoreName" class="player-blue">Player 1</div>
+              <div id="playerTwoScoreName" class="player-green">Player 2</div>
+            </div>
+            <!-- 6 rounds -->
+            <div class="score-row"><div>1</div><div id="p1r1" class="player-blue">-</div><div id="p2r1" class="player-green">-</div></div>
+            <div class="score-row"><div>2</div><div id="p1r2" class="player-blue">-</div><div id="p2r2" class="player-green">-</div></div>
+            <div class="score-row"><div>3</div><div id="p1r3" class="player-blue">-</div><div id="p2r3" class="player-green">-</div></div>
+            <div class="score-row"><div>4</div><div id="p1r4" class="player-blue">-</div><div id="p2r4" class="player-green">-</div></div>
+            <div class="score-row"><div>5</div><div id="p1r5" class="player-blue">-</div><div id="p2r5" class="player-green">-</div></div>
+            <div class="score-row"><div>6</div><div id="p1r6" class="player-blue">-</div><div id="p2r6" class="player-green">-</div></div>
+            <div class="score-row"><div>Total</div><div id="p1r7" class="player-blue">-</div><div id="p2r7" class="player-green">-</div></div>
+          </div>
+          <div class="center-left-wrapper">
+            <div class="pile-label">Trekstapel</div>
+            <div class="center-left">
+              <img id="deckCard" src="images/Back.JPG" alt="Card" class="card" />
+               <div id="deckCount" class="deck-count"></div>
+            </div>
+          </div>
+          <div class="center-right-wrapper">
+            <div id="discardPile" class="pile-label">Aflegstapel</div>
+            <div class="center-right">
+              <img id="discardCard" src="" class="card"/>
+            </div>
+          </div>
+        </div>
+        <div class="bottom">Bottom</div>
+      </div>
+      <div class="right">Right</div>
+    </div>
+  </div>
+  </div>
+
+  <script src="improved.js"></script>
+</body>
+</html>
